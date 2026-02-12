@@ -1,5 +1,5 @@
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
+import { fetch } from '@tauri-apps/plugin-http';
+import { getVersion } from '@tauri-apps/api/app';
 
 export interface UpdateInfo {
   has_update: boolean;
@@ -10,29 +10,49 @@ export interface UpdateInfo {
   published_at?: string;
 }
 
-export interface UpdateProgress {
-  downloaded: number;
-  total: number;
-}
-
 /**
- * 检查更新（使用 Tauri Updater）
+ * 检查更新（直接从 Gitee API 获取）
  */
 export async function checkUpdate(): Promise<UpdateInfo | null> {
   try {
-    const update = await check();
+    const currentVersion = await getVersion();
 
-    if (update) {
-      return {
-        has_update: true,
-        latest_version: update.version,
-        current_version: update.currentVersion,
-        release_notes: update.body,
-        published_at: update.date,
-      };
+    // 从 Gitee API 获取最新 Release
+    const response = await fetch('https://gitee.com/api/v5/repos/fps_z/SeaLantern/releases/latest', {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Sea-Lantern'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`API 请求失败: ${response.status}`);
     }
 
-    return null;
+    const release = await response.json() as any;
+
+    // 解析版本号（去掉 v 前缀）
+    const latestVersion = release.tag_name.replace(/^v/, '');
+
+    // 比较版本号
+    const hasUpdate = compareVersions(currentVersion, latestVersion);
+
+    // 查找 Windows 安装包
+    const asset = release.assets?.find((a: any) =>
+      a.name.toLowerCase().endsWith('.exe') || a.name.toLowerCase().endsWith('.msi')
+    );
+
+    // 构建 Release 页面链接
+    const releaseUrl = `https://gitee.com/fps_z/SeaLantern/releases/tag/${release.tag_name}`;
+
+    return {
+      has_update: hasUpdate,
+      latest_version: latestVersion,
+      current_version: currentVersion,
+      download_url: releaseUrl,
+      release_notes: release.body || '',
+      published_at: release.created_at
+    };
   } catch (error) {
     console.error('检查更新失败:', error);
     throw error;
@@ -40,53 +60,23 @@ export async function checkUpdate(): Promise<UpdateInfo | null> {
 }
 
 /**
- * 下载并安装更新
- * @param onProgress 下载进度回调
+ * 比较版本号
  */
-export async function downloadAndInstall(
-  onProgress?: (progress: UpdateProgress) => void
-): Promise<void> {
-  try {
-    const update = await check();
+function compareVersions(current: string, latest: string): boolean {
+  const parseVersion = (v: string) => {
+    return v.split('.').map(n => parseInt(n) || 0);
+  };
 
-    if (!update) {
-      throw new Error('没有可用的更新');
-    }
+  const currentParts = parseVersion(current);
+  const latestParts = parseVersion(latest);
 
-    // 下载并安装
-    await update.downloadAndInstall((event) => {
-      switch (event.event) {
-        case 'Started':
-          console.log('开始下载更新...');
-          if (onProgress) {
-            onProgress({ downloaded: 0, total: event.data.contentLength || 0 });
-          }
-          break;
-        case 'Progress':
-          console.log(`下载进度: ${event.data.chunkLength} bytes`);
-          if (onProgress && event.data.chunkLength) {
-            onProgress({
-              downloaded: event.data.chunkLength,
-              total: event.data.contentLength || 0
-            });
-          }
-          break;
-        case 'Finished':
-          console.log('下载完成');
-          break;
-      }
-    });
+  for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
+    const c = currentParts[i] || 0;
+    const l = latestParts[i] || 0;
 
-    console.log('更新已安装，准备重启...');
-  } catch (error) {
-    console.error('下载安装失败:', error);
-    throw error;
+    if (l > c) return true;
+    if (l < c) return false;
   }
-}
 
-/**
- * 重启应用
- */
-export async function restartApp(): Promise<void> {
-  await relaunch();
+  return false;
 }

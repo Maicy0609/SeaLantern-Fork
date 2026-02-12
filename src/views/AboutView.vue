@@ -4,7 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import SLCard from "../components/common/SLCard.vue";
 import SLButton from "../components/common/SLButton.vue";
 import { contributors as contributorsList } from "../data/contributors";
-import { checkUpdate, downloadAndInstall, restartApp, type UpdateInfo, type UpdateProgress } from "../api/update";
+import { checkUpdate, type UpdateInfo } from "../api/update";
 import { getAppVersion, BUILD_YEAR } from "../utils/version";
 
 console.log('[AboutView] 脚本开始执行');
@@ -18,8 +18,6 @@ const contributors = ref(contributorsList);
 const isCheckingUpdate = ref(false);
 const updateInfo = ref<UpdateInfo | null>(null);
 const updateError = ref<string | null>(null);
-const isDownloading = ref(false);
-const downloadProgress = ref<UpdateProgress>({ downloaded: 0, total: 0 });
 
 onBeforeMount(() => {
   console.log('[AboutView] onBeforeMount - 组件即将挂载');
@@ -76,30 +74,6 @@ async function handleCheckUpdate() {
   }
 }
 
-// 下载并安装更新
-async function handleDownloadUpdate() {
-  console.log('[AboutView] 开始下载更新');
-  isDownloading.value = true;
-  updateError.value = null;
-
-  try {
-    await downloadAndInstall((progress) => {
-      downloadProgress.value = progress;
-    });
-
-    // 下载完成，提示重启
-    const shouldRestart = confirm('更新已下载完成，是否立即重启应用？');
-    if (shouldRestart) {
-      await restartApp();
-    }
-  } catch (error) {
-    console.error('[AboutView] 下载更新失败:', error);
-    updateError.value = `自动下载失败，请尝试手动下载`;
-  } finally {
-    isDownloading.value = false;
-  }
-}
-
 // 手动下载
 async function handleManualDownload() {
   console.log('[AboutView] 打开手动下载链接');
@@ -113,13 +87,6 @@ async function handleManualDownload() {
     }
   }
 }
-
-// 计算下载进度文本
-const downloadProgressText = computed(() => {
-  if (downloadProgress.value.total === 0) return '';
-  const percent = Math.round((downloadProgress.value.downloaded / downloadProgress.value.total) * 100);
-  return `${percent}%`;
-});
 
 console.log('[AboutView] 脚本执行完成');
 </script>
