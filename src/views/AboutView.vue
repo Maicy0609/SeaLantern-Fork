@@ -5,11 +5,11 @@ import SLCard from "../components/common/SLCard.vue";
 import SLButton from "../components/common/SLButton.vue";
 import { contributors as contributorsList } from "../data/contributors";
 import { checkUpdate, downloadAndInstall, restartApp, type UpdateInfo, type UpdateProgress } from "../api/update";
-import { APP_VERSION, BUILD_YEAR } from "../utils/version";
+import { getAppVersion, BUILD_YEAR } from "../utils/version";
 
 console.log('[AboutView] 脚本开始执行');
 
-const version = APP_VERSION;
+const version = ref('加载中...');
 const buildDate = BUILD_YEAR;
 
 const contributors = ref(contributorsList);
@@ -25,9 +25,13 @@ onBeforeMount(() => {
   console.log('[AboutView] onBeforeMount - 组件即将挂载');
 });
 
-onMounted(() => {
+onMounted(async () => {
   console.log('[AboutView] onMounted - 组件已挂载');
   console.log('[AboutView] contributors:', contributors.value);
+
+  // 加载版本号
+  version.value = await getAppVersion();
+  console.log('[AboutView] 版本号:', version.value);
 });
 
 // 打开外部链接
@@ -238,7 +242,6 @@ console.log('[AboutView] 脚本执行完成');
                 <div class="notes-content">{{ updateInfo.release_notes }}</div>
               </div>
               <SLButton
-                v-if="updateInfo.download_url"
                 variant="primary"
                 size="sm"
                 @click="handleDownloadUpdate"
